@@ -1,12 +1,13 @@
 data segment
-	file  db 'pis.bmp',00
-	head  db 54 dup(0)		;位图信息头以及文件头部分
-	color db 1024 dup(0)	;调色板
-	datas db 64000 dup(0)	;图片数据信息部分
-	Errword db 'ERROR!',13,10,'$'
+	file  db 'pis.bmp',00;位于当前文件夹下bmp图片文件
+	head  db 54 dup(0);位图信息头以及文件头部分
+	color db 1024 dup(0);调色板
+	datas db 64000 dup(0);图片数据信息部分
+	errword db 'ERROR!',13,10,'$';文件操作错误提示信息
+	handle1 dw ?;保存文件号
 data ends
 stacks segment stack
-	dw 100 dup(?)
+	dw 256 dup(?)
 	top label word
 stacks ends
 code segment 
@@ -24,25 +25,26 @@ code segment
 	mov al,00h
 	lea dx,file
 	int 21h
-	jc Error
+	jc error
 	
 	;将文件读入数据缓冲区
-	mov bx,ax		;bx=文件代号
+	mov handle1,ax;bx=文件代号
+	mov bx,handle1
 	mov ah,3fh
-	mov cx,0fe36h 	;cx=读取的字节数，即图片文件大小
+	mov cx,0fe36h;cx=读取的字节数，即图片文件大小
 	lea dx,head
 	int 21h
-	jc Error
+	jc error
 	
-	;设置显示模式 256色，320×200像素
+	;设置显示模式 256色，320*200像素
 	mov ax,0013h
 	int 10h
 	
-	;设置调色板，输出（OUT）色彩索引号，共写256次
+	;设置调色板
 	mov cx,256
 	mov bl,0
 	mov di,0
-L1:
+l1:
 	mov al,bl
 	mov dx,03c8h;dx=端口号 03C8 r/w VGA PEL address write mode
 	out dx,al
@@ -51,16 +53,16 @@ L1:
 
 	push cx
 	mov cl,2
-
-	mov al,color[di+2]			;位图中调色板存放格式：ＢＧＲ
+	;位图中调色板存放格式:BGR
+	mov al,color[di+2];red
 	shr al,cl
 	out dx,al		
 
-	mov al,color[di+1]
+	mov al,color[di+1];green
 	shr al,cl
 	out dx,al
 
-	mov al,color[di]
+	mov al,color[di];blue
 	shr al,cl
 	out dx,al
 
@@ -69,14 +71,11 @@ L1:
 	inc bl
 	loop L1
 	
-	;向显存地址写入数据
-	mov ax,0a000h	;显存地址(0A000:0000~0A000:0F9FF)
+	;es段显存地址首地址
+	mov ax,0a000h;显存地址(0A000:0000~0A000:0F9FF)
 	mov es,ax
-	
-	;位图中图像由底向上自左向右存储，
-	;而显示屏上要求从上至下
-	
-			
+
+	;循环写入显存	
 	lea si,datas;si定位图像数据首地址  	
 
 	mov cx,200;设置外层循环
@@ -103,8 +102,8 @@ loop2:
 
 	jmp exit
 	
-Error:
-	lea dx,Errword
+error:
+	lea dx,errword
 	mov ah,9
 	int 21h
 
